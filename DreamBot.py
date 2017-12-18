@@ -23,10 +23,6 @@ FOOTER = "^^i.redd.it ^^and ^^imgur ^^posts \n\n ^^Made ^^by ^^/u/ThePeskyWabbit
 PATH = "C:\\Users\\JoshLaptop\\PycharmProjects\\DreamBot\\commented.txt"
 stringList = ["!dreambot"]
 
-_image_formats = ['bmp', 'dib', 'eps', 'ps', 'gif', 'im', 'jpg', 'jpe', 'jpeg',
-                  'pcd', 'pcx', 'png', 'pbm', 'pgm', 'ppm', 'psd', 'tif', 'tiff',
-                  'xbm', 'xpm', 'rgb', 'rast', 'svg']
-
 model_fn = "tensorflow_inception_graph.pb"
 
 graph = tf.Graph()
