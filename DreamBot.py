@@ -14,24 +14,24 @@ import io
 import numpy as np
 import PIL.Image
 import tensorflow as tf
+import logging
+import os
+logging.getLogger('tensorflow').setLevel(logging.DEBUG)
 
 USERAGENT = 'web:DreamProcessor:v0.1 (by /u/ThePeskyWabbit)'
-FOOTER = "^^I ^^am ^^a ^^bot!! ^^I ^^work ^^on ^^i.redd.it ^^and " \
-         "^^imgur ^^posts!(not ^^galleries ^^yet) ^^I ^^now ^^use ^^a ^^randomly ^^selected ^^subset ^^of ^^filters ^^from ^^the ^^original ^^set ^^to ^^add ^^diversity." \
-         " \n\n ^^Made ^^by ^^/u/ThePeskyWabbit ^^check ^^/r/DreamProcessor ^^for ^^all ^^of ^^my ^^creations!"
-PATH = "C:\\Users\\Josh\\PycharmProjects\\DreamBot\\commented.txt"
+FOOTER = "^^i.redd.it ^^and ^^imgur ^^posts \n\n ^^Made ^^by ^^/u/ThePeskyWabbit ^^check ^^/r/DreamProcessor ^^for ^^all ^^of ^^my ^^creations! ^^Source: https://github.com/PeskyWabbit/DreamProcessor"
+PATH = "C:\\Users\\JoshLaptop\\PycharmProjects\\DreamBot\\commented.txt"
 stringList = ["!dreambot"]
 
+_image_formats = ['bmp', 'dib', 'eps', 'ps', 'gif', 'im', 'jpg', 'jpe', 'jpeg',
+                  'pcd', 'pcx', 'png', 'pbm', 'pgm', 'ppm', 'psd', 'tif', 'tiff',
+                  'xbm', 'xpm', 'rgb', 'rast', 'svg']
 
-#Starting here, this is mostly borrowed code from tensorflow. I definitely do not know enough about these
-#algorithms to creat my own yet. The borrowed code ends at the render_deepdream function which I have tweaked a bit.
 model_fn = "tensorflow_inception_graph.pb"
 
-#creates the graph which is used for image recognition
 graph = tf.Graph()
 sess = tf.InteractiveSession(graph=graph)
 
-#mostly black magic
 with tf.gfile.FastGFile(model_fn, 'rb') as f:
     graph_def = tf.GraphDef()
     graph_def.ParseFromString(f.read())
@@ -40,8 +40,7 @@ imagenet_mean = 117.0
 t_preprocessed = tf.expand_dims(t_input-imagenet_mean, 0)
 tf.import_graph_def(graph_def, {'input':t_preprocessed})
 
-#find all of the layers that match the name contents i am looking for. this returns six but there are wayyyy more.
-layers = [op.name for op in graph.get_operations() if op.type=='Conv2D' and 'import/mixed4c' in op.name]
+layers = [op.name for op in graph.get_operations() if op.type=='Conv2D' and 'import/mixed3b' in op.name]
 print(layers)
 
 feature_nums = [int(graph.get_tensor_by_name(name + ':0').get_shape()[-1]) for name in layers]
@@ -51,7 +50,7 @@ print('Total number of feature channels:', sum(feature_nums))
 
 
 # Helper functions for TF Graph visualization
-# black magic
+
 def strip_consts(graph_def, max_const_size=32):
     """Strip large constant values from graph_def."""
     strip_def = tf.GraphDef()
@@ -65,7 +64,7 @@ def strip_consts(graph_def, max_const_size=32):
                 tensor.tensor_content = tf.compat.as_bytes("<stripped %d bytes>" % size)
     return strip_def
 
-#not sure what this is even used for but it is indeed used.
+
 def rename_nodes(graph_def, rename_func):
     res_def = tf.GraphDef()
     for n0 in graph_def.node:
@@ -81,17 +80,15 @@ def rename_nodes(graph_def, rename_func):
 tmp_def = rename_nodes(graph_def, lambda s: "/".join(s.split('_', 1)))
 #show_graph(tmp_def)
 
-#this is only used when im testing the dream filter.
 print("selecting Layer and channel")
 layer = 'mixed4b'
 channel = 139  # picking some feature channel to visualize
 
-#add some static to the pic so that more patterns can be found
 print("generating noise")
-#start with a gray image with a little noise
+# start with a gray image with a little noise
 img_noise = np.random.uniform(size=(224, 224, 3)) + 130.0
 
-#this is used for actually displaying the picture on my screen. Only works in Jupyter notebook
+
 def showarray(a, fmt='jpeg'):
     print("Entered showArray")
     a = np.uint8(np.clip(a, 0, 1) * 255)
@@ -100,18 +97,17 @@ def showarray(a, fmt='jpeg'):
     display(Image(data=f.getvalue()))
 
 
-#not too sure what this does either. gotta have it.
+
 def visstd(a, s=0.1):
     '''Normalize the image range for visualization'''
     return (a - a.mean()) / max(a.std(), 1e-4) * s + 0.5
 
-#gets the graph/layer for processing
+
 def T(layer):
     print(graph.get_tensor_by_name("import/%s:0" % layer))
     '''Helper for getting layer output tensor'''
     return graph.get_tensor_by_name("import/%s:0" % layer)
 
-#magic
 def tffunc(*argtypes):
     '''Helper that transforms TF-graph generating function into a regular one.
     See "resize" function below.
@@ -130,7 +126,7 @@ def resize(img, size):
     return tf.image.resize_bilinear(img, size)[0,:,:,:]
 resize = tffunc(np.float32, np.int32)(resize)
 
-#this does the editing of the image im pretty sure
+
 def calc_grad_tiled(img, t_grad, tile_size=512):
     '''Compute the value of tensor t_grad over the image in a tiled way.
     Random shifts are applied to the image to blur tile boundaries over
@@ -152,9 +148,9 @@ step increases the intesity. iter_n increases how many times the filter runs
 defaults: step = 1.5    iter_n = 10     octave_n = 4     octave_scale = 1.4
 pretty good settings: iter_n=20, step=1.5 octave_n=4 octave_scale=1.4
 '''
-#THIS IS UTTER MAGIC. I do plan on reading more into this when I have time but for now, it works and I get the very general idea of it.
+
 def render_deepdream(t_obj, args, img0=img_noise,
-                     iter_n=27, step=2.0, octave_n=4, octave_scale=1.4):
+                     iter_n=27, step=1.7, octave_n=4, octave_scale=1.4):
     t_score = tf.reduce_mean(t_obj)  # defining the optimization objective
     t_grad = tf.gradients(t_score, t_input)[0]  # behold the power of automatic differentiation!
 
@@ -182,9 +178,9 @@ def render_deepdream(t_obj, args, img0=img_noise,
     a = np.uint8(np.clip(a, 0, 1) * 255)
 
     PIL.Image.fromarray(a).save("temp." + args[0])
-    print("DeepDream image saved.")
+    print("DeepDream image saved as temp." + args[0])
 
-#used for imgurAuth()
+
 def get_config():
     ''' Create a config parser for reading INI files '''
     try:
@@ -194,50 +190,39 @@ def get_config():
         import configparser
         return configparser.ConfigParser()
 
-#downloads the picture from the given url, resizes it so the max resolution perameter is lower than 1400
-#this helps show the effects on larger picture without having to zoom in close.
-#args is set to return the filetype(.jpg/.png/etc) as well as the size of the image.
 def directDownload(url):
     request = rlib.Request(url)
     response = rlib.urlopen(request)
     data = response.read()
-
-    #create return list. adds filetype as first element and creates filename.
     args = []
     split = url.split('.')
     print(split)
     args.append(split[3])
     print("Image type: " + args[0])
-    fname = "temp." + args[0]
 
-    #opens and captures size for resizing
     img = Image.open(io.BytesIO(data))
     size = img.size
     print("Image size: " + str(size))
-
-    #resizing loop
+    fname = "temp." + args[0]
     while(size[0] > 1400 or size[1] > 1400):
         print("resizing img")
         img = img.resize((size[0] // 2, size[1] // 2), Image.ANTIALIAS)
         size = img.size
-
     print("resized = " + str(img.size))
     print("saving image")
     try:
         img.save(fname)
+        print("Saved input picure as temp." + args[0])
     except:
-        #this is that lame fix. If I could, i would have used continue here but it had to be used in the
-        #runBot() function so the fail arg is used for that purpose.
         print("Failed to save image")
         args[0] = "fail"
     args.append(img.size)
     return args
 
-#uploads the picture to imgur and returns an Image object of the picture. I have not had a single error with this so no
-#try clause has been necessary.
+
 def uploadImgur(argsList):
     album = None
-    image_path = 'C:\\Users\\Josh\\PycharmProjects\\DreamBot\\temp.' + argsList[0]
+    image_path = 'C:\\Users\\JoshLaptop\\PycharmProjects\\DreamBot\\temp.' + argsList[0]
     config = {
         'album': album,
         'name': 'Deep Dream Pic!',
@@ -245,12 +230,11 @@ def uploadImgur(argsList):
         'description': 'Image processed through Deepdream filter {0}'.format(datetime.now())
     }
 
-    print("Uploading...")
+    print("Uploading temp." + argsList[0] + "...")
     image = imgurClient.upload_from_path(image_path, config=config, anon=False)
     print("done")
     return image
 
-#auth my account with imgur for fetching and uploading data. uses .ini file for user info.
 def imgurAuth():
     config = get_config()
     config.read('auth.ini')
@@ -260,67 +244,168 @@ def imgurAuth():
     print("Authenticated as " + client_id + " on imgur client.\n")
     return client
 
-#copies all of the bots creations to /r/DreamProcessor and gives a link to the original in the comment of said post.
-def sendToSub(comment, image):
-    user = comment.author.name
-    sub = str(comment.submission.subreddit)
-    commentLink = "https://www.reddit.com" + comment.permalink
-    title = "DreamBot requested by /u/" + user + " in /r/" + sub
+def sendToSub(data, image, directUrl):
+    print("sendToSub url received: " + directUrl )
+    user = data.author.name
     url = image['link']
-    post = reddit.subreddit('dreamprocessor').submit(title, url=url)
-    post.reply("Link to the original picture: " + commentLink)
 
-#What you guys actually see is pretty much all brought together here. This opens the image that was downloaded, converts it
-#to a format that tensorflow can work with, and uploads it to imgur and gives you the link.
-def renderAndReply(comment, args):
-    try:
-        response = comment.reply("I am processing your request! This comment will be edited when it is complete! If this "
-                             "never changes, something went wrong :X")
-    except:
-        print("Could not tell user their request was being processed...")
+    #if its a comment
+    if hasattr(data, "is_root"):
+        sub = "/r/" + str(data.submission.subreddit)
+        link = "https://www.reddit.com" + str(data.permalink) + "\n\nDirect image link: " + str(directUrl)
+
+    #if its a message
+    else:
+
+        sub = "a private message."
+        link = directUrl
+
+    title = "DreamBot requested by /u/" + user + " in " + sub
+
+    post = reddit.subreddit('dreamprocessor').submit(title, url=url)
+    post.reply("Link to the original picture: " + link)
+'''
+mixed4a = 620
+mixed4b = 648
+mixed4c = 664
+mixed4d = 704
+mixed3a = 368
+mixed3b = 640
+
+'''
+def renderAndReply(data, args, url):
+    flag = False
+    response = None
+    filter = {
+        0: ("mixed4a", 570),
+        1: ('mixed4b', 598),
+        2: ("mixed4c", 614),
+        3: ("mixed4d", 654),
+        4: ("mixed3a", 318),
+        5: ("mixed3b", 590)
+    }
+    if hasattr(data, "is_root"):
+        flag = True
+        try:
+            response = data.reply("I am processing your request! This comment will be edited when it is complete! If this "
+                                 "never changes, it is likely I have reached my comment rate limit for this subreddit. Try again later.")
+        except:
+            print("Could not tell user their request was being processed...")
+            pass
 
     img0 = PIL.Image.open('temp.' + args[0])
-    #changing the perams of the image if its a .png. not sure exactly why this needs to happen, but it makes things work...
     if ('png' in args[0]):
         img0 = np.float32(img0)[:,:,:3]
     else:
         img0 = np.float32(img0)
 
-    #generate a random range of layers to process the image with. this is still being tweaked.
-    int1 = randint(50, 550)
-    int2 = randint(int1, 613)
+    layerData = filter[randint(0,5)]
+    layer = layerData[0]
+    upper = layerData[1]
+    int1 = randint(50, upper)
+    int2 = randint(int1, upper)
     print("Layer range: (" + str(int1-50) + ", " + str(int2+50) + ")")
-    render_deepdream(tf.square(T('mixed4c')[:,:,:,int1-50:int2+50]), args, img0)
+    render_deepdream(tf.square(T(layer)[:,:,:,int1-50:int2+50]), args, img0)
 
-    #Post the pics!!!!
     try:
         image = uploadImgur(args)
-        sendToSub(comment, image)
-        response.edit("[Here is your Deep Dream picture]({0})".format(image['link']) + "\n\n" + FOOTER)
-        print("sent response to user")
+        if(flag):
+            sendToSub(data, image, url)
+            response.edit("[Here is your Deep Dream picture]({0})".format(image['link']) + " Processed using imageset: " + layer + " layers " + str(int1) + " - " + str(int2) + "\n\n" + FOOTER)
+            print("sent response to user")
+        else:
+            sendToSub(data, image, url)
+            data.reply("[Here is your Deep Dream picture]({0})".format(image['link']) + layer + " layers " + str(int1) + " - " + str(int2) + "\n\n" + FOOTER)
+            print("replied to PM")
+
     except:
         print("Comment or upload failed...")
 
-#boring reddit authenticate method.
 def authenticate():
     print("Authenticating...")
     reddit = praw.Reddit('bot1', user_agent=USERAGENT)
     print("Authenticated as {}\n".format(reddit.user.me()))
     return reddit
 
-#adds ciomment.id to list so it doesnt duplicate respond.
+
 def writeCommentToFile(id):
     print("saving comment ID: " + id)
     commentFile = open(PATH, 'a')
     commentFile.write(id + "\n\n")
     commentFile.close()
 
-#what you see when the picture couldnt be downloaded from imgur.
 def failReply(comment):
     comment.reply("There was an error saving this picture. It is likely that it was a .png and was converted to a .jpg by the host site.\n\n" + FOOTER)
     writeCommentToFile(comment.id)
 
-#lets get things started.
+def processCall(data):
+    url = None
+    #if its a comment that called !dreambot
+    if hasattr(data, "is_root"):
+        print("processing a call from a comment")
+        dataWithLink = data.parent()
+        print("https://www.reddit.com" + str(dataWithLink.permalink))
+        if hasattr(dataWithLink, "is_root"):
+            print("processing a link from a comment")
+            url = re.findall(
+                'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+',
+                dataWithLink.body)
+            url = str(url[0])
+            if (')' in url):
+                url = url[0:len(url) - 1]
+            print("https://www.reddit.com" + dataWithLink.permalink)
+        else:
+            url = dataWithLink.url
+        print("Comment url: " + url)
+
+    elif hasattr(data, "mark_read"):
+        print("Processing a call from a PM")
+        url = re.findall(
+            'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+',
+            data.body)
+        url = str(url[0])
+        print("message url: " + url)
+
+    else:
+        print("Data was found to be neither a comment nor a message.")
+    if ('gif' in url):
+        data.reply(
+            "Sorry but I cannot process gifs. If I could, It would take like 2 hours anyways so yeah. Sorry!\n\n" + FOOTER)
+    elif ("//i.imgur" in url or "i.redd.it" in url or "//m.imgur" in url):
+        print("i.imgur.com / i.redd.it / m.imgur link being used")
+        args = directDownload(url)
+        print("directUrl sending to renderAndReply: " + url)
+        renderAndReply(data, args, url)
+    elif ("//imgur.com/a/" in url):
+        print("/imgur.com/a/ link being used")
+        split = url.split("/")
+        images = imgurClient.get_album_images(split[3])
+        pic = images[0]
+        args = directDownload(pic.link)
+        print("directUrl sending to renderAndReply: " + url)
+        renderAndReply(data, args, url)
+    elif ("/imgur.com" in url):
+        print("/imgur.com link being used")
+        split = url.split("/")
+        link = "https://i.imgur.com/" + split[3] + ".jpg"
+        args = directDownload(link)
+        print("directUrl sending to renderAndReply: " + url)
+        renderAndReply(data, args, url)
+    else:
+        try:
+            print("did not recognize link. trying last resort download...")
+            args = directDownload(url)
+            print("directUrl sending to renderAndReply: " + url)
+            renderAndReply(data, args, url)
+        except:
+            try:
+                data.reply("I am not compatible with these links yet.\n\n" + FOOTER)
+            except:
+                print("comment reply failed...")
+    if hasattr(data, "is_root"):
+        writeCommentToFile(data.id)
+
+
 auth = True
 while (auth):
     try:
@@ -331,87 +416,38 @@ while (auth):
         print("Authentication Failed, retying in 30 seconds.")
         time.sleep(30)
 
-#the magic
+
 def runBot():
-    #post to all except the other ones mentioned.
     SUBREDDITS = 'all-suicidewatch-depression-anxiety-askreddit'
-    while(True):
-        print("pulling 500 comments...")
-        commentFile = open(PATH, 'r')
-        commentList = commentFile.read().splitlines()
-        commentFile.close()
+    while (True):
         try:
-            for comment in reddit.subreddit(SUBREDDITS).comments(limit=500):
-                if (comment.id in commentList):
-                    continue
-                #I use a list so I can add commands if need be. good for testing it on the side along side running the bot.
-                for word in stringList:
-                    #finds the command in comments.
-                    match = re.findall(word, comment.body.lower())
-                    if (match):
-                        post = comment.parent()
-                        print("https://www.reddit.com" + comment.permalink)
+            print("checking inbox")
+            for message in reddit.inbox.unread(limit = 1):
+                message.mark_read()
+                if('!dreambot' in message.body):
+                    processCall(message)
 
-                        try:
-                            #checks if the variable "post" is a comment or not.
-                            if hasattr(post, 'is_root'):
-                                print("responding to a comment picture")
-                                #finds the url in the comment. only the first match is used.
-                                url = re.findall(
-                                    'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+',
-                                    post.body)
-                                url = str(url[0])
-                                #cleans a ) off the end in the case of it being a formatted text link [like this](link.com)
-                                if (')' in url):
-                                    url = url[0:len(url) - 1]
-                            else:
-                                url = post.url
-                            #no gifs because it would take ages to process.
-                            if('gif' in url):
-                                comment.reply("Sorry but I cannot process gifs. If I could, It would take like 2 hours anyways so yeah. Sorry!\n\n" + FOOTER)
-                            #these are both direct image links so they can be downloaded the same way
-                            elif("//i.imgur" in url or "i.redd.it" in url):
-                                print("/i.imgur.com or i.redd.it link being used")
-                                args = directDownload(url)
-                                #if the image oouldnt be downloaded
-                                if("fail" in args):
-                                    failReply(comment)
-                                    continue
-                                renderAndReply(comment, args)
-                            #if its an album, grab the first picture and use its direct link
-                            elif("//imgur.com/a/" in url):
-                                print("/imgur.com/a/ link being used")
-                                url = url.split("/")
-                                images = imgurClient.get_album_images(url)
-                                pic = images[0]
-                                args = directDownload(pic.link)
-                                #if the image oouldnt be downloaded
-                                if ("fail" in args):
-                                    failReply(comment)
-                                    continue
-                                renderAndReply(comment, args)
-                            #if its a link to the imgur page but not the direct link, create the direct link.
-                            elif("/imgur.com" in url):
-                                print("/imgur.com link being used")
-                                url = post.url.split("/")
-                                link = "https://i.imgur.com/" + url[3] + ".jpg"
-                                args = directDownload(link)
-                                #if the image oouldnt be downloaded
-                                if ("fail" in args):
-                                    failReply(comment)
-                                    continue
-                                renderAndReply(comment, args)
-                            else:
-                                #all other cases of links. I do plan on adding a try/except in here to just try and
-                                #download the link anyways because who knows, it may be a direct link!
+            print("pulling 500 comments...")
+            commentFile = open(PATH, 'r')
+            commentList = commentFile.read().splitlines()
+            commentFile.close()
+            try:
+                for comment in reddit.subreddit(SUBREDDITS).comments(limit=500):
+                    if (comment.id in commentList):
+                        continue
+                    for word in stringList:
+                        match = re.findall(word, comment.body.lower())
+                        if (match):
+                            try:
+                                print("Processing comment call!!")
+                                processCall(comment)
+                            except:
                                 try:
-                                    comment.reply("I am not compatible with these links yet.\n\n" + FOOTER)
+                                    comment.reply("I'm testing some new things and I guess a real deal error occurred.")
                                 except:
-                                    print("comment reply failed...")
-                        except:
-                            comment.reply("This is giving me errors. I'll tell the dev and maybe he can have a look at it...\n\n" + FOOTER)
-                        writeCommentToFile(comment.id)
+                                    print("couldnt send error reply")
+            except:
+                print("something really went wrong...")
         except:
-            print("something really went wrong...")
-
+            print("This would have crashed the whole bot. likely a timeout")
 runBot()
