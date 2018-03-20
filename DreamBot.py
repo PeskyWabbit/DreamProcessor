@@ -439,17 +439,6 @@ def processCall(data, fNum):
         writeCommentToFile(data.id)
 
 
-auth = True
-while (auth):
-    try:
-        reddit = authenticate()
-        imgurClient = imgurAuth()
-        auth = False
-    except:
-        print("Authentication Failed, retying in 30 seconds.")
-        time.sleep(30)
-
-
 def runBot():
     SUBREDDITS = 'all-suicidewatch-depression-anxiety-askreddit'
     while (True):
@@ -496,4 +485,15 @@ def runBot():
                 print("something really went wrong...")
         except:
             print("This would have crashed the whole bot. likely a timeout")
-runBot()
+
+if __name__ == '__main__':
+    auth = True
+    while (auth):
+        try:
+            reddit = authenticate()
+            imgurClient = imgurAuth()
+            auth = False
+        except:
+            print("Authentication Failed, retying in 30 seconds.")
+            time.sleep(30)
+    runBot()
