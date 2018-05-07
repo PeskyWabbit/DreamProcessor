@@ -1,4 +1,4 @@
-All code from https://github.com/lengstrom/fast-style-transfer
+#All code from https://github.com/lengstrom/fast-style-transfer
 
 from __future__ import print_function
 import functools
