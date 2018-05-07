@@ -1,4 +1,4 @@
-All code from https://github.com/lengstrom/fast-style-transfer
+#All code from https://github.com/lengstrom/fast-style-transfer
 
 mport scipy.misc, numpy as np, os, sys
 
