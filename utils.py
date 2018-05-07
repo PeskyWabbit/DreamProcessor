@@ -1,4 +1,6 @@
-import scipy.misc, numpy as np, os, sys
+All code from https://github.com/lengstrom/fast-style-transfer
+
+mport scipy.misc, numpy as np, os, sys
 
 def save_img(out_path, img):
     img = np.clip(img, 0, 255).astype(np.uint8)
