@@ -21,9 +21,12 @@ USERAGENT = 'web:DreamProcessor:v0.1 (by /u/ThePeskyWabbit)'
 FOOTER = "^^I ^^work ^^on ^^i.redd.it ^^and ^^imgur ^^posts ^^and ^^links. ^^See ^^all ^^my ^^new ^^options ^^[here](https://imgur.com/a/QWANb)" \
          "\n\n^^check ^^/r/DreamProcessor ^^for ^^my" \
          " ^^new ^^command ^^options ^^and ^^all ^^of ^^my ^^creations! ^^https://github.com/PeskyWabbit/DreamProcessor"
-#(1[1-6]|[1-9])?
+lastUserToCall = ""
+userStreak = 0
+commented = []
+
 PATH = "/home/jpeel/PycharmProjects/DreamBot/commented.txt"
-regexes = "!dreambot(?:1[0-7]|[1-9])?(?:x[2-3])?", "!dbhowto"
+regexes = "!dreambot(?:1[0-8]|[1-9])?(?:x[2-3])?", "!dbhowto"
 combined = re.compile('|'.join('(?:{0})'.format(x) for x in regexes))
 
 model_fn = "tensorflow_inception_graph.pb"
@@ -178,7 +181,7 @@ def render_deepdream(t_obj, args, img0=img_noise,
     a = img / 255.0
     a = np.uint8(np.clip(a, 0, 1) * 255)
 
-    PIL.Image.fromarray(a).save("/home/jpeel/PycharmProjects/DreamBot/pics/temp." + args[0])
+    PIL.Image.fromarray(a).save("/home/jpeel/PycharmProjects/DreamBot/temp." + args[0])
     print("DeepDream image saved as temp1." + args[0])
 
 
@@ -230,7 +233,7 @@ def directDownload(url):
 #post image to imgur and return the image post object
 def uploadImgur(argsList):
     album = None
-    image_path = '/home/jpeel/PycharmProjects/DreamBot/pics/temp.' + argsList[0]
+    image_path = '/home/jpeel/PycharmProjects/DreamBot/temp.' + argsList[0]
     config = {
         'album': album,
         'name': 'Deep Dream Pic!',
@@ -255,16 +258,12 @@ def imgurAuth():
 
 #crosspost to /r/dreamprocessor unless it is NSFW
 def sendToSub(data, image, directUrl):
-    noGoSubs = ["test", "de", "DreamProcessor", "dreamprocessor"]
-    permalink = ""
-    nsfw = False
-
+    global userStreak
+    if(userStreak > 3):
+        return
     #if its a comment
     if hasattr(data, "is_root"):
-        if(data.submission.over_18):
-            return
         sub = "/r/" + str(data.submission.subreddit)
-        permalink = "https://www.reddit.com" + str(data.permalink)
 
     #if its a message
     else:
@@ -282,14 +281,17 @@ def sendToSub(data, image, directUrl):
             permalink = "Picture received in PM."
 
     #Build comment for post in sub
-    link = permalink + "\n\nDirect image link: " + str(directUrl)
+    link = "www.reddit.com" + permalink + "\n\nDirect image link: " + str(directUrl)
     user = data.author.name
     url = image['link']
 
     title = "DreamBot requested by /u/" + user + " in " + sub
 
     #make post
-    post = reddit.subreddit('dreamprocessor').submit(title, url=url)
+    if (data.submission.over_18):
+        post = reddit.subreddit('NSFWDreamBot').submit(title, url=url)
+    else:
+        post = reddit.subreddit('dreamprocessor').submit(title, url=url)
     post.reply("Link to the original post: " + link)
 
 #data to map fnum to the desired filter
@@ -308,17 +310,18 @@ filters = {
         10: ("mixed3a", [5, 9]),
         11:("Strarry Night", "/home/jpeel/PycharmProjects/DreamBot/checks/starrynight"),
         12:("Alex Gray", "/home/jpeel/PycharmProjects/DreamBot/checks/alexgray"),
-        13:("Fractal", "/home/jpeel/PycharmProjects/DreamBot/checks/fractal"),
+        13:("Fractal", "/home/jpeel/PycharmProjects/DreamBot/checks/stain"),
         14:("MS Paint Oil", "/home/jpeel/PycharmProjects/DreamBot/checks/MSOil"),
         15:("Rain Princess", "/home/jpeel/PycharmProjects/DreamBot/checks/rain"),
         16:("Trippy Watercolor", "/home/jpeel/PycharmProjects/DreamBot/checks/trippywc"),
         17:("Great Wave", "/home/jpeel/PycharmProjects/DreamBot/checks/wave"),
+        18:("Fun Color", "/home/jpeel/PycharmProjects/DreamBot/checks/funcolor")
     }
 
 #create the deepdream/style transfer picture and send it to the user. Should likely be split into 2 separate functions. Do later
 def renderAndReply(data, args, url):
     banned = ["pics", "elitedangerous", "perfecttiming", "strangerthings", "travel", "aww", "rabbits", "moviedetails", "choosingbeggars", "battlestations", "interestingasfuck", "itookapicture", "gamingcirclejerk",
-              "realgirls", "seattle", "natureisfuckinglit", "dankmemes"]
+              "realgirls", "seattle", "natureisfuckinglit", "dankmemes", "random_acts_of_amazon", "tgirls", "earthporn"]
 
     flag = False
     response = None
@@ -327,7 +330,7 @@ def renderAndReply(data, args, url):
         flag = True
         try:
             response = data.reply("I am processing your request! This comment will be edited when it is complete! If this "
-                                 "never changes, it is likely I have reached my comment rate limit for this subreddit. Try again later.")
+                                 "never changes, there is likely a bug which will be sorted out as soon as my dev has a minute to look into it!")
         except:
             print("Could not tell user their request was being processed...")
             pass
@@ -337,19 +340,22 @@ def renderAndReply(data, args, url):
     fMult = int(args[1][1])
 
     #if no int given or int is out of bounds, generate one for the random set of images.
-    if (fnum == 0 or fnum > 17):
-        rand = randint(3, 17)
+    if (fnum == 0 or fnum > 18):
+        rand = randint(3, 18)
         fnum = rand
         layerData = filters[rand]
 
     #args[0] is the filetype
     img0 = PIL.Image.open('temp.' + args[0])
     in_path = "/home/jpeel/PycharmProjects/DreamBot/temp."+str(args[0])
-    out = "/home/jpeel/PycharmProjects/DreamBot/pics/temp."+str(args[0])
+    out = "/home/jpeel/PycharmProjects/DreamBot/temp."+str(args[0])
 
     #style transfer filters
+    i = 0
     if(fnum > 10):
-        evaluate.process(in_path, out, filters[fnum][1])
+        while(i < fMult):
+            i+=1
+            evaluate.process(in_path, out, filters[fnum][1])
 
     #non style transfer filters
     else:
@@ -376,8 +382,9 @@ def renderAndReply(data, args, url):
     try:
         image = uploadImgur(args)
         time.sleep(1)
-        wholeResponse = "[Here is your Deep Dream picture]({0})".format(
-            image['link']) + "\n\n" + FOOTER
+        wholeResponse = "[Here is your DreamBot picture]({0})".format(
+            image['link']) + " Made using option " + str(fnum) + "\n\n" + FOOTER
+
         #is comment
         if(flag):
             if(str(data.submission.subreddit).lower() in banned):
@@ -386,6 +393,7 @@ def renderAndReply(data, args, url):
                 response.edit(wholeResponse)
             sendToSub(data, image, url)
             print("SENT RESPONSE TO USER")
+
         #is message
         else:
             sendToSub(data, image, url)
@@ -403,21 +411,32 @@ def authenticate():
     return reddit
 
 #save comment ID to text document to avoid duplicate replies. Text document is cleared every 500 comment batches
-def writeCommentToFile(id):
-    print("saving comment ID: " + id)
-    commentFile = open(PATH, 'a')
-    commentFile.write(id + "\n\n")
-    commentFile.close()
+#def writeCommentToFile(id):
+#    print("saving comment ID: " + id)
+#    commentFile = open(PATH, 'a')
+#    commentFile.write(id + "\n\n")
+#    commentFile.close()
 
 def failReply(comment):
+    global commented
     comment.reply("There was an error saving this picture. It is likely that it was a .png and was converted to a .jpg by the host site.\n\n" + FOOTER)
-    writeCommentToFile(comment.id)
+    commented.append(comment.id)
 
 #once command has been found in comment or PM, it is passed in here
 def processCall(data, fNum):
     url = None
+
+    global lastUserToCall
+    global userStreak
     #if its a comment that called !dreambot
     if hasattr(data, "is_root"):
+
+        if (lastUserToCall == data.author.name):
+            userStreak += 1
+        else:
+            lastUserToCall = data.author.name
+            userStreak = 0
+        print(str(userStreak) + " / " + lastUserToCall)
 
         print("processing a call from a comment")
         dataWithLink = data.parent()
@@ -502,8 +521,9 @@ def processCall(data, fNum):
                 data.reply("Please be sure you are responding to a submission or a comment with a link in it. If you are, I am not compatible with those links.\n\n" + FOOTER)
             except:
                 print("comment reply failed...")
+    global commented
     if hasattr(data, "is_root"):
-        writeCommentToFile(data.id)
+        commented.append(data.id)
 
 auth = True
 while (auth):
@@ -515,51 +535,70 @@ while (auth):
         print("Authentication Failed, retying in 30 seconds.")
         time.sleep(30)
 
+def purgeCommentList():
+    print("purging contents of comment list")
+    open(PATH, 'w').close()
+
 #pull comments and look for the command. Once found, parse fnum and multiplier ints and pass to processCall function and save comment ID to file.
 def runBot():
     SUBREDDITS = 'all-suicidewatch-depression-anxiety-askreddit'
+    global commented
+    inboxCount = 0
+    count = 0
     while (True):
         try:
-            fNum = []
-            print("checking inbox")
-            for message in reddit.inbox.unread(limit=1):
-                message.mark_read()
-                match = re.findall("!!dreambot(?:1[0-7]|[1-9])?(?:x2)?", message.body.lower())
-                if(match):
-                    print("Message match = " + str(match))
-                    fNum = re.findall("[1][0-7]|[1-9]", match[0])
-                    if not fNum:
-                        fNum.append(0)
-                    print("fNum = " + fNum)
-                    processCall(message, fNum)
+            if (inboxCount == 5):
+                fNum = []
+                print("checking inbox")
+                for message in reddit.inbox.unread(limit=1):
+                    message.mark_read()
+                    match = combined.findall(message.body.lower())
 
-            print("pulling 500 comments...")
-            commentFile = open(PATH, 'r')
-            commentList = commentFile.read().splitlines()
-            commentFile.close()
-            try:
-                for comment in reddit.subreddit(SUBREDDITS).comments(limit=500):
-                    if (comment.id in commentList or comment.author.name == "DreamProcessor"):
-                        continue
-                    match = combined.findall(comment.body.lower())
                     if(match):
-                        print("Comment match = " + str(match))
-                        fNum = re.findall("[1][0-7]|[1-9]", match[0])
+                        print("Message match = " + str(match))
+                        fNum = re.findall("[1][0-8]|[1-9]", match[0])
                         if not fNum:
                             fNum.append(0)
                         if len(fNum) < 2:
                             fNum.append(1)
                         print(fNum)
+                        processCall(message, fNum)
+                inboxCount = 0
+
+            inboxCount += 1
+            print("pulling 500 comments...")
+            #commentFile = open(PATH, 'r')
+            #commentList = commentFile.read().splitlines()
+            #commentFile.close()
+            try:
+                count +=1
+                if count == 50:
+                    print("purging comment file")
+                    commented = []
+                    count = 0
+
+                for comment in reddit.subreddit(SUBREDDITS).comments(limit=500):
+                    if (comment.id in commented):
+                        continue
+                    match = combined.findall(comment.body.lower())
+                    if(match):
+                        print("Comment match = " + str(match))
+                        fNum = re.findall("[1][0-8]|[1-9]", match[0])
+                        if not fNum:
+                            fNum.append(0)
+                        if len(fNum) < 2:
+                            fNum.append(1)
+                        print(fNum)
+
                         try:
                             print("Processing comment call!!")
                             processCall(comment, fNum)
-                        except:
 
-                            #below is the makeshift error handling to keep this guy going
+                        except:
                             try:
                                print("failure on match try catch")
                                comment.reply("Please be sure there is a link in the post you are reponding to. If this is not the case, tagging for notification /u/ThePeskyWabbit\n\n")
-                               writeCommentToFile(comment.id)
+                               commented.append(comment.id)
                             except:
                                 print("couldnt send error reply")
             except:
