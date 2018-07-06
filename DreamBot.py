@@ -23,7 +23,7 @@ else:
     
 
 ####Setting the seed ensures that an image with the exact same paramters are rendered in exactly the same way
-#p.random.seed(1)
+p.random.seed(1)
 logging.getLogger('tensorflow').setLevel(logging.DEBUG)
 
 USERAGENT = 'web:DreamProcessor:v0.1 (by /u/ThePeskyWabbit)'
