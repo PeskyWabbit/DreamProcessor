@@ -3,6 +3,7 @@ from datetime import datetime
 from IPython.display import clear_output, Image, display, HTML
 from imgurpython import ImgurClient
 from PIL import Image
+from io import BytesIO
 from random import randint
 from io import BytesIO
 import praw
