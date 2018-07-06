@@ -5,7 +5,6 @@ from imgurpython import ImgurClient
 from PIL import Image
 from io import BytesIO
 from random import randint
-from io import BytesIO
 import praw
 import time
 import re
