@@ -1,20 +1,30 @@
 from __future__ import print_function
 from datetime import datetime
-from io import BytesIO
 from IPython.display import clear_output, Image, display, HTML
 from imgurpython import ImgurClient
 from PIL import Image
+from io import BytesIO
 from random import randint
 import praw
 import time
 import re
-import urllib2 as rlib
 import io
 import numpy as np
 import PIL.Image
 import tensorflow as tf
 import logging
 import evaluate
+import utils as utils
+import sys
+import os
+if (sys.version_info > (3, 0)):
+     import urllib.request as rlib
+else:
+    import urllib2 as rlib
+    
+
+####Setting the seed ensures that an image with the exact same paramters are rendered in exactly the same way
+#p.random.seed(1)
 logging.getLogger('tensorflow').setLevel(logging.DEBUG)
 
 USERAGENT = 'web:DreamProcessor:v0.1 (by /u/ThePeskyWabbit)'
@@ -24,17 +34,28 @@ FOOTER = "^^I ^^work ^^on ^^i.redd.it ^^and ^^imgur ^^posts ^^and ^^links. ^^See
 lastUserToCall = ""
 userStreak = 0
 commented = []
+"""
+#####
+Important:
+Set to False to test locally
+"""
+auth = True
+run_bot = True
 
 PATH = "/home/jpeel/PycharmProjects/DreamBot/commented.txt"
 regexes = "!dreambot(?:1[0-8]|[1-9])?(?:x[2-3])?", "!dbhowto"
 combined = re.compile('|'.join('(?:{0})'.format(x) for x in regexes))
 
 model_fn = "tensorflow_inception_graph.pb"
+inception_download_url="http://storage.googleapis.com/download.tensorflow.org/models/inception5h.zip"
+save_folder="./renderedImages/"
 
 graph = tf.Graph()
 sess = tf.InteractiveSession(graph=graph)
 
 with tf.gfile.FastGFile(model_fn, 'rb') as f:
+    ###
+    utils.maybe_download_and_extract(inception_download_url, ".")
     graph_def = tf.GraphDef()
     graph_def.ParseFromString(f.read())
 t_input = tf.placeholder(np.float32, name = 'input')
@@ -43,68 +64,20 @@ imagenet_mean = 117.0
 t_preprocessed = tf.expand_dims(t_input-imagenet_mean, 0)
 tf.import_graph_def(graph_def, {'input':t_preprocessed})
 
+##Not neeeded, but useful for getting available layer names#
 layers = [op.name for op in graph.get_operations() if op.type=='Conv2D' and 'import/' in op.name]
 print(layers)
 
-feature_nums = [int(graph.get_tensor_by_name(name + ':0').get_shape()[-1]) for name in layers]
+#feature_nums = [int(graph.get_tensor_by_name(name + ':0').get_shape()[-1]) for name in layers]
 
-print('Number of layers', len(layers))
-print('Total number of feature channels:', sum(feature_nums))
+#print('Number of layers', len(layers))
+#print('Total number of feature channels:', sum(feature_nums))
 
+###The below code is from Google's Tensorflow DeepDream tutorial Notbook'''
 
-'''The below code is from Google's Tensorflow DeepDream tutorial Notbook'''
-# Helper functions for TF Graph visualization
-
-def strip_consts(graph_def, max_const_size=32):
-    """Strip large constant values from graph_def."""
-    strip_def = tf.GraphDef()
-    for n0 in graph_def.node:
-        n = strip_def.node.add()
-        n.MergeFrom(n0)
-        if n.op == 'Const':
-            tensor = n.attr['value'].tensor
-            size = len(tensor.tensor_content)
-            if size > max_const_size:
-                tensor.tensor_content = tf.compat.as_bytes("<stripped %d bytes>" % size)
-    return strip_def
-
-
-def rename_nodes(graph_def, rename_func):
-    res_def = tf.GraphDef()
-    for n0 in graph_def.node:
-        n = res_def.node.add()
-        n.MergeFrom(n0)
-        n.name = rename_func(n.name)
-        for i, s in enumerate(n.input):
-            n.input[i] = rename_func(s) if s[0] != '^' else '^' + rename_func(s[1:])
-    return res_def
-
-# Visualizing the network graph. Be sure expand the "mixed" nodes to see their
-# internal structure. We are going to visualize "Conv2D" nodes.
-tmp_def = rename_nodes(graph_def, lambda s: "/".join(s.split('_', 1)))
-#show_graph(tmp_def)
-
-print("selecting Layer and channel")
-layer = 'mixed4b'
-channel = 139  # picking some feature channel to visualize
-
-print("generating noise")
-# start with a gray image with a little noise
+#Not really needed, but ensures render_deepdream is never called with an empty image
 img_noise = np.random.uniform(size=(224, 224, 3)) + 130.0
 
-
-def showarray(a, fmt='jpeg'):
-    print("Entered showArray")
-    a = np.uint8(np.clip(a, 0, 1) * 255)
-    f = BytesIO()
-    PIL.Image.fromarray(a).save(f, fmt)
-    display(Image(data=f.getvalue()))
-
-
-
-def visstd(a, s=0.1):
-    '''Normalize the image range for visualization'''
-    return (a - a.mean()) / max(a.std(), 1e-4) * s + 0.5
 
 
 def T(layer):
@@ -180,7 +153,6 @@ def render_deepdream(t_obj, args, img0=img_noise,
 
     a = img / 255.0
     a = np.uint8(np.clip(a, 0, 1) * 255)
-
     PIL.Image.fromarray(a).save("/home/jpeel/PycharmProjects/DreamBot/temp." + args[0])
     print("DeepDream image saved as temp1." + args[0])
 
@@ -335,7 +307,6 @@ def renderAndReply(data, args, url):
             print("Could not tell user their request was being processed...")
             pass
 
-
     fnum = int(args[1][0])
     fMult = int(args[1][1])
 
@@ -351,6 +322,7 @@ def renderAndReply(data, args, url):
     out = "/home/jpeel/PycharmProjects/DreamBot/temp."+str(args[0])
 
     #style transfer filters
+    ####seperate function
     i = 0
     if(fnum > 10):
         while(i < fMult):
@@ -358,6 +330,7 @@ def renderAndReply(data, args, url):
             evaluate.process(in_path, out, filters[fnum][1])
 
     #non style transfer filters
+    
     else:
         if ('png' in args[0]):
             img0 = np.float32(img0)[:,:,:3]
@@ -377,6 +350,7 @@ def renderAndReply(data, args, url):
 
         #with tf.device('/gpu:0'):
         render_deepdream(tf.square(T(layerSet)[:,:,:,int1:int2]), args, img0, 27*fMult)
+
 
     #updload and respond to user
     try:
@@ -525,7 +499,6 @@ def processCall(data, fNum):
     if hasattr(data, "is_root"):
         commented.append(data.id)
 
-auth = True
 while (auth):
     try:
         reddit = authenticate()
@@ -607,4 +580,51 @@ def runBot():
             print("This would have crashed the whole bot. likely a timeout")
 
 #one function to rule them all
-runBot()
+if run_bot:
+    runBot()
+            
+####local Test functions
+
+def render_deepdream_local(layer, int1, int2, img0,
+                     iter_n=27, step=1.6, octave_n=4, octave_scale=1.6):
+    
+    t_obj=tf.square(T(layer)[:,:,:,int1:int2])
+    t_score = tf.reduce_mean(t_obj)  # defining the optimization objective
+    t_grad = tf.gradients(t_score, t_input)[0]  # behold the power of automatic differentiation!
+    print("iter_n = " + str(iter_n))
+    # split the image into a number of octaves
+    img = img0
+    octaves = []
+    for i in range(octave_n - 1):
+        hw = img.shape[:2]
+        lo = resize(img, np.int32(np.float32(hw) / octave_scale))
+        hi = img - resize(lo, hw)
+        img = lo
+        octaves.append(hi)
+
+    # generate details octave by octave
+    for octave in range(octave_n):
+        if octave > 0:
+            hi = octaves[-octave]
+            img = resize(img, hi.shape[:2]) + hi
+        for i in range(iter_n):
+            g = calc_grad_tiled(img, t_grad)
+            img += g * (step / (np.abs(g).mean() + 1e-7))
+        clear_output()
+
+    a = img / 255.0
+    a = np.uint8(np.clip(a, 0, 1) * 255)
+    ##Create precise filename
+    filename=layer+"_"+str(int1)+"_"+str(int2)+".jpg"
+    if not os.path.exists(save_folder):
+        os.makedirs(save_folder)
+    with open(os.path.join(save_folder,filename), 'wb') as file:
+        PIL.Image.fromarray(a).save(file, 'jpeg')
+
+
+def load_image(filename):
+    image = PIL.Image.open(filename)
+    return np.float32(image)
+
+
+
