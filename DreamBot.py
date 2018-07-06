@@ -36,7 +36,7 @@ commented = []
 """
 #####
 Important:
-Set to false to test locally
+Set to False to test locally
 """
 auth = True
 run_bot = True
