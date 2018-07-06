@@ -23,7 +23,7 @@ else:
     
 
 ####Setting the seed ensures that an image with the exact same paramters are rendered in exactly the same way
-p.random.seed(1)
+#p.random.seed(1)
 logging.getLogger('tensorflow').setLevel(logging.DEBUG)
 
 USERAGENT = 'web:DreamProcessor:v0.1 (by /u/ThePeskyWabbit)'
@@ -306,7 +306,6 @@ def renderAndReply(data, args, url):
             print("Could not tell user their request was being processed...")
             pass
 
-    ####possible different function
     fnum = int(args[1][0])
     fMult = int(args[1][1])
 
@@ -330,7 +329,6 @@ def renderAndReply(data, args, url):
             evaluate.process(in_path, out, filters[fnum][1])
 
     #non style transfer filters
-    ###seperate function
     
     else:
         if ('png' in args[0]):
@@ -353,7 +351,6 @@ def renderAndReply(data, args, url):
         render_deepdream(tf.square(T(layerSet)[:,:,:,int1:int2]), args, img0, 27*fMult)
 
 
-    ##possible different funtion
     #updload and respond to user
     try:
         image = uploadImgur(args)
